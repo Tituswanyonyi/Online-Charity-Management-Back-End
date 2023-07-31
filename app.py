@@ -2,19 +2,58 @@ from flask import Flask,jsonify,request,make_response
 from flask_migrate import Migrate
 from flask_cors import CORS
 from models import Admin,Donor,Ngo,Donation,db,Ngo_donation_request
+import jwt
+import datetime
+from functools import wraps
 app = Flask(__name__)
+
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///charity_management.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = b'thisisthesecretkey'
 
 migrate=Migrate(app, db)
 db.init_app(app)
 
 cors = CORS(app)
+def token_required(f):
+    @wraps(f)
+    def decorated(*args,**kwargs):
+        token = request.args.get('token')
+        if not token:
+            return jsonify({'message':'token is missing!'})
+        try:
+            data = jwt.encode(token,app.config['SECRET_KEY'])
+        except:
+            return jsonify({'message':'token is invalid'})
+        return f(*args,**kwargs)
+    return decorated
+            
+                
+            
+@app.route('/unprotected')
+def unprotected():
+    return ({'message':'available for everyone'})
+@app.route('/protected')
+def protected():
+    return ({'message':'only available for people with valid tokens'})
+
 @app.route('/register')
+
 @app.route('/login')
+def login():
+    auth = request.authorization
+    if auth and auth.password == '@d1234':
+        token = jwt.encode({'user':auth.username,'exp':datetime.datetime.utcnow()+datetime.timedelta(minutes=30)},app.config['SECRET_KEY'])
+        return jsonify({'token': token})
+    return make_response('could not verify',401, {'WWW-Authenticate':'Basic realm="login Requires"'})
+
+
 @app.route('/signup')
+def signup():
+    return 'Signup'
 @app.route('/logout')
+
 @app.route('/admins', methods=['GET'])
 def get_admins():
     admins = Admin.query.all()

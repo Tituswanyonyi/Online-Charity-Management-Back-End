@@ -2,6 +2,7 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy_serializer import SerializerMixin
+from werkzeug.security import generate_password_hash
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///charity_management.db'
 db = SQLAlchemy(app)
@@ -16,6 +17,8 @@ class Admin(db.Model,SerializerMixin):
 
     def __repr__(self):
         return f'{self.id},{self.name},{self.email},{self.password}'
+    def set_password(self, password):
+        self.password = generate_password_hash(password)
     
 class Donor(db.Model,SerializerMixin):
     __tablename__= 'donors'
@@ -26,6 +29,8 @@ class Donor(db.Model,SerializerMixin):
     
     def __repr__(self):
         return f'{self.id},{self.name},{self.email}{self.password}'
+    def set_password(self, password):
+        self.password = generate_password_hash(password)
     
     
     
@@ -47,6 +52,9 @@ class Ngo(db.Model,SerializerMixin):
     def __repr__(self):
         return f'{self.id},{self.org_name},{self.org_email},{self.org_address},{self.registration_number} {self.location}{self.password}{self.confirm_password}'
     
+    def set_password(self, password):
+        self.password = generate_password_hash(password)
+        
 class Donation(db.Model,SerializerMixin):
     __tablename__ = 'donations'
     id = db.Column(db.Integer(),primary_key= True)

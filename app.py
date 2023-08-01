@@ -3,7 +3,7 @@ from flask_migrate import Migrate
 from flask_cors import CORS
 from models import Admin,Donor,Ngo,Donation,db,Ngo_donation_request
 import jwt
-import datetime
+from datetime import datetime
 from functools import wraps
 app = Flask(__name__)
 
@@ -40,7 +40,7 @@ def protected():
 
 @app.route('/register')
 
-@app.route('/login')
+@app.route('/login',methods = ['POST'])
 def login():
     auth = request.authorization
     if auth and auth.password == '@d1234':
@@ -129,6 +129,7 @@ def get_donors():
             'id': donor.id,
             'name': donor.name,
             'email': donor.email,
+            'password':donor.password
         }
         for donor in donors 
     ]
@@ -222,9 +223,9 @@ def ngos():
     else:
         return make_response(jsonify({"message": "Method not allowed"}), 405)
     
-@app.route('/ngos/<int:id>', methods = ['GET', 'PATCH','DELETE'])
+@app.route('/ngos/<int:id>', methods=['GET', 'PATCH', 'DELETE'])
 def ngo(id):
-    ngo = Ngo.query.filter_by(id==id).first()
+    ngo = Ngo.query.filter_by(id=id).first()
 
     if not ngo:
         return make_response(jsonify({"message": "Ngo not found"}), 404)
@@ -240,7 +241,6 @@ def ngo(id):
         }
         return make_response(jsonify(ngo_data), 200)
     elif request.method == 'PATCH':
-        
         request_data = request.get_json()
         ngo.org_name = request_data.get('org_name', ngo.org_name)
         ngo.org_email = request_data.get('org_email', ngo.org_email)
@@ -250,19 +250,17 @@ def ngo(id):
 
         # Perform necessary validation on the data fields (you can add more)
 
-        
         db.session.commit()
 
-        return make_response(jsonify({"message": "ngo updated successfully"}), 200)
+        return make_response(jsonify({"message": "Ngo updated successfully"}), 200)
     elif request.method == 'DELETE':
         db.session.delete(ngo)
         db.session.commit()
 
-        return make_response(jsonify({"message": "ngo deleted successfully"}), 200)
-
+        return make_response(jsonify({"message": "Ngo deleted successfully"}), 200)
     else:
         return make_response(jsonify({"message": "Method not allowed"}), 405)
-        
+
 @app.route('/donations',methods = ['GET', 'POST'])
 
 def get_all_donation():
@@ -272,8 +270,6 @@ def get_all_donation():
         donations_data = [
             {
                 'id': donation.id,
-                'name': donation.name,
-                'email': donation.email,
                 'donor_name': donation.donor_name,
                 'bank_name': donation.bank_name,
                 'donated_amount': donation.donated_amount,
@@ -289,8 +285,6 @@ def get_all_donation():
         return make_response(jsonify(donations_data), 200)
     elif request.method == 'POST':
         request_data = request.get_json()
-        name = request_data.get('name')
-        email = request_data.get('email')
         donor_name = request_data.get('donor_name')
         bank_name = request_data.get('bank_name')
         donated_amount = request_data.get('donated_amount')
@@ -301,8 +295,6 @@ def get_all_donation():
 
         # Perform necessary validation on the data fields (you can add more)
         new_donation = Donation(
-            name=name,
-            email=email,
             donor_name=donor_name,
             bank_name=bank_name,
             donated_amount=donated_amount,
@@ -321,7 +313,7 @@ def get_all_donation():
 
 
 @app.route('/donations/<int:id>', methods=['GET',  'PATCH','DELETE'])
-def get_donation_by_id():
+def get_donation_by_id(id):
     donation = Donation.query.filter_by(id=id).first()
 
     if not donation:
@@ -333,7 +325,7 @@ def get_donation_by_id():
             'donor_name': donation.donor_name,
             'bank_name': donation.bank_name,
             'donated_amount': donation.donated_amount,
-            'date_of_donation': donation.date_of_donation.isoformat(),
+            'date_of_donation': datetime.utcnow(),
             'balance': donation.balance,
             'donor_id': donation.donor_id,
             'ngo_id': donation.ngo_id,
@@ -417,10 +409,10 @@ def ngo_donation_requests():
         return make_response(jsonify({"message": "Method not allowed"}), 405)
 
 
-@app.route('/ngo_donation_requests/:id',methods =['GET','PATCH','DELETE'])
+@app.route('/ngo_donation_requests/<int:id>',methods =['GET','PATCH','DELETE'])
 
-def ngo_donation_requests_by_id():
-    ngo_donation_requests = ngo_donation_requests.query.filter_by(id=id).first()
+def ngo_donation_requests_by_id(id):
+    ngo_donation_requests = Ngo_donation_request.query.filter_by(id=id).first()
 
     if not ngo_donation_requests:
         return make_response(jsonify({"message": "Ngo donation request not found"}), 404)

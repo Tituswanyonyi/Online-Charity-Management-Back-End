@@ -3,6 +3,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy_serializer import SerializerMixin
 from werkzeug.security import generate_password_hash
+import re
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///charity_management.db'
 db = SQLAlchemy(app)
@@ -55,6 +56,14 @@ class Ngo(db.Model,SerializerMixin):
     def set_password(self, password):
         self.password = generate_password_hash(password)
         
+    def is_valid_email(email):
+        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(email_regex, email)
+    def is_valid_password(password):
+    # Basic password validation: at least 8 characters, one uppercase, one lowercase, and one digit
+        return len(password) >= 8 and any(char.isupper() for char in password) and \
+            any(char.islower() for char in password) and any(char.isdigit() for char in password)
+
 class Donation(db.Model,SerializerMixin):
     __tablename__ = 'donations'
     id = db.Column(db.Integer(),primary_key= True)

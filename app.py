@@ -38,7 +38,6 @@ def unprotected():
 def protected():
     return ({'message':'only available for people with valid tokens'})
 
-@app.route('/register')
 
 @app.route('/login',methods = ['POST'])
 def login():
@@ -74,9 +73,6 @@ def create_admin():
     email = request_data.get('email')
     password = request_data.get('password')
 
-    # Perform necessary validation on name and email fields (you can add more)
-
-    
     new_admin = Admin(name=name, email=email,password = password)
 
     db.session.add(new_admin)
@@ -105,7 +101,6 @@ def get_admin(id):
         admin.email = request_data.get('email', admin.email)
         admin.password = request_data.get('password',admin.password)
 
-        # Perform necessary validation on name and email fields (you can add m
         db.session.commit()
 
         return make_response(jsonify({"message": "Admin updated successfully"}), 200)
@@ -141,7 +136,6 @@ def new_donor():
     name = request_data.get('name')
     email = request_data.get('email')
 
-    # Perform necessary validation on name and email fields (you can add more)
 
     new_donor = Donor(name=name, email=email)
     db.session.add(new_donor)
@@ -248,7 +242,6 @@ def ngo(id):
         ngo.registration_number = request_data.get('registration_number', ngo.registration_number)
         ngo.location = request_data.get('location', ngo.location)
 
-        # Perform necessary validation on the data fields (you can add more)
 
         db.session.commit()
 
@@ -293,7 +286,6 @@ def get_all_donation():
         ngo_id = request_data.get('ngo_id')
         admin_id = request_data.get('admin_id')
 
-        # Perform necessary validation on the data fields (you can add more)
         new_donation = Donation(
             donor_name=donor_name,
             bank_name=bank_name,
@@ -343,7 +335,6 @@ def get_donation_by_id(id):
         donation.ngo_id = request_data.get('ngo_id', donation.ngo_id)
         donation.admin_id = request_data.get('admin_id', donation.admin_id)
 
-        # Perform necessary validation on the data fields (you can add more)
 
         db.session.commit()
         return make_response(jsonify({"message": "Donation made successfully"}), 200)

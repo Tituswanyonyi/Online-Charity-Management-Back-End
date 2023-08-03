@@ -1,22 +1,24 @@
 import os
-from flask import Flask,jsonify,request,make_response,redirect, url_for
+from flask import Flask,jsonify,request,make_response,current_app
 from flask_migrate import Migrate
 from flask_cors import CORS
 from models import Admin,Donor,Ngo,Donation,db,Ngo_donation_request
 import jwt
-from datetime import datetime
-from functools import wraps
+from datetime import datetime,timedelta
+from werkzeug.security import generate_password_hash,check_password_hash
+
+
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import bcrypt
 from sqlalchemy.exc import IntegrityError
-import json
 app = Flask(__name__)
+jwt = JWTManager(app)
 
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///charity_management.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = 'abvsjdgdb'
-jwt = JWTManager(app)
+
 
 migrate=Migrate(app, db)
 db.init_app(app)
@@ -65,107 +67,64 @@ cors = CORS(app)
 #     filename = 'About.js'
 #     return send_from_directory(path, filename)
 USER_TYPES = ['admin', 'ngo', 'donor']
+USER_TYPE_CLASSES = {
+    'admin': Admin,
+    'ngo': Ngo,
+    'donor': Donor
+}
 @app.route('/signup', methods=['POST'])
 def signup():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"message": "No JSON data provided in the request body"}), 400
+    data = request.get_json()
 
-        username = data.get('username')
-        email = data.get('email')
-        password = data.get('password')
-        user_type = data.get('user_type')
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+    user_type = data.get('user_type')
 
-        missing_fields = []
-        if not username:
-            missing_fields.append("username")
-        if not email:
-            missing_fields.append("email")
-        if not password:
-            missing_fields.append("password")
-        if not user_type:
-            missing_fields.append("user_type")
+    if not username or not email or not password or not user_type:
+        return jsonify({'error': 'Please provide username, email, password, and user_type.',
+                        'responseCode': 400}), 400
 
-        if missing_fields:
-            return jsonify({"message": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    user_class = USER_TYPE_CLASSES.get(user_type.lower())
+    if not user_class:
+        return jsonify({'error': 'Invalid user_type.',
+                        'responseCode': 400}), 400
 
-        if user_type.lower() not in USER_TYPES:
-            return jsonify({"message": "Invalid userType. Choose from 'admin', 'ngo', or 'donor'"}), 400
+    if user_class.query.filter_by(username=username).first():
+        return jsonify({'error': 'Username already exists',
+                        'responseCode': 409}), 409
+    if user_class.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already exists',
+                        'responseCode': 409}), 409
+    hashed_password = generate_password_hash(password)
+    new_user = user_class(username=username, email=email, password=hashed_password)
+    db.session.add(new_user)
+    db.session.commit()
 
-        salt = bcrypt.gensalt()
-        hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+    # Generate an access token for the newly created user
+    access_token = create_access_token(identity={'username': username, 'user_type': user_type})
 
-
-        new_user = None
-
-        if user_type.lower() == 'admin':
-            new_user = Admin(name=username, email=email, password=hashed_password)
-        elif user_type.lower() == 'ngo':
-            new_user = Ngo(username=username, email=email, password=hashed_password)
-        elif user_type.lower() == 'donor':
-            new_user = Donor(name=username, email=email, password=hashed_password)
-        else:
-            return jsonify({"message": "Invalid userType"}), 400
-
-        db.session.add(new_user)
-        db.session.commit()
-
-        access_token = create_access_token(identity={"email": email})
-        return jsonify({"message": "User registered successfully", "access_token": access_token}), 201
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({"message": "User Already Exists"}), 400
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"message": f"An error occurred: {str(e)}"}), 500
-
-
+    # Return the token along with the response
+    return jsonify({'message': 'User created successfully.', 'access_token': access_token, 'responseCode': 200}), 200
 @app.route('/login', methods=['POST'])
 def login():
-    try:
-        data = request.get_json()
-        print(data)
+    username = request.json.get('username')
+    password = request.json.get('password')
+    user_type = request.json.get('user_type')  
 
-        email = data.get('email')
-        password = data.get('password')
+    if not username or not password or not user_type:
+        return jsonify({'error': 'Username, password, and user_type are required.'}), 400
 
-        if not email or not password:
-            return jsonify({"message": "Provide an email and password in JSON format in the request body"}), 400
+    user_class = USER_TYPE_CLASSES.get(user_type.lower())
+    if not user_class:
+        return jsonify({'error': 'Invalid user_type.'}), 400
 
-        user_instance = None
-        user_type = None
-
-        admin = Admin.query.filter_by(email=email).first()
-        ngo = Ngo.query.filter_by(email=email).first()
-        donor = Donor.query.filter_by(email=email).first()
-
-        if admin:
-            user_instance = admin
-            user_type = 'admin'
-        elif ngo:
-            user_instance = ngo
-            user_type = 'ngo'
-        elif donor:
-            user_instance = donor
-            user_type = 'donor'
-        else:
-            return jsonify({"message": "User not found"}), 404
-
-        if bcrypt.check_password_hash(user_instance.password, password):
-            access_token = create_access_token(identity={"email": email})
-            
-            db.session.add(user_instance)
-            db.session.commit()
-            
-            return jsonify({
-                "message": f"Logged in successfully as {user_type}",
-                "access_token": access_token
-            }), 200
-        else:
-            return jsonify({"message": "Invalid login credentials"}), 401
-    except AttributeError:
-        return jsonify({"message": "Provide an email and password in JSON format in the request body"}), 400
+    user = user_class.query.filter_by(username=username).first()
+    if user and check_password_hash(user.password, password):  # Check the password using bcrypt
+        access_token = create_access_token(identity={'username': username, 'user_type': user_type})
+        return jsonify({'access_token': access_token}), 200
+    else:
+        return jsonify({'error': 'Invalid username or password.'}), 401
 
 @app.route('/admin/dashboard')
 def admin_dashboard():
@@ -185,35 +144,35 @@ def donor_dashboard():
 #     user = get_jwt_identity()
 #     print(user)
 #     return "secret data!",200
-@app.route('/dashboard', methods=['GET'])
-@jwt_required
-def dashboard():
-    user = get_jwt_identity()
+# @app.route('/dashboard', methods=['GET'])
+# @jwt_required
+# def dashboard():
+#     user = get_jwt_identity()
 
-    if user.get('email'):
-        user_instance = None
+#     if user.get('email'):
+#         user_instance = None
 
-        # Determine user type based on the user's email
-        admin = Admin.query.filter_by(email=user['email']).first()
-        ngo = Ngo.query.filter_by(email=user['email']).first()
-        donor = Donor.query.filter_by(email=user['email']).first()
+#         # Determine user type based on the user's email
+#         admin = Admin.query.filter_by(email=user['email']).first()
+#         ngo = Ngo.query.filter_by(email=user['email']).first()
+#         donor = Donor.query.filter_by(email=user['email']).first()
 
-        if admin:
-            user_instance = admin
-            user_type = 'admin'
-        elif ngo:
-            user_instance = ngo
-            user_type = 'ngo'
-        elif donor:
-            user_instance = donor
-            user_type = 'donor'
+#         if admin:
+#             user_instance = admin
+#             user_type = 'admin'
+#         elif ngo:
+#             user_instance = ngo
+#             user_type = 'ngo'
+#         elif donor:
+#             user_instance = donor
+#             user_type = 'donor'
 
-        if user_instance:
-            return jsonify({"message": f"Welcome to the {user_type.capitalize()} dashboard", "user_data": user_instance.serialize()}), 200
-        else:
-            return jsonify({"message": "User not found"}), 404
-    else:
-        return jsonify({"message": "Invalid user data"}), 400
+#         if user_instance:
+#             return jsonify({"message": f"Welcome to the {user_type.capitalize()} dashboard", "user_data": user_instance.serialize()}), 200
+#         else:
+#             return jsonify({"message": "User not found"}), 404
+#     else:
+#         return jsonify({"message": "Invalid user data"}), 400
 
 
     
@@ -223,7 +182,7 @@ def get_admins():
     admins_data = [
         {
             'id': admin.id,
-            'name': admin.name,
+            'username': admin.username,
             'email': admin.email,
         }
         for admin in admins
@@ -233,11 +192,11 @@ def get_admins():
 @app.route('/admins', methods=['POST'])
 def create_admin():
     request_data = request.get_json()
-    name = request_data.get('name')
+    username = request_data.get('username')
     email = request_data.get('email')
     password = request_data.get('password')
 
-    new_admin = Admin(name=name, email=email,password = password)
+    new_admin = Admin(username=username, email=email,password = password)
 
     db.session.add(new_admin)
     db.session.commit()
@@ -252,7 +211,7 @@ def get_admin(id):
             return make_response(jsonify({"message": "Admin not found", "id":"admin_id"}), 404)
         admin_data = {
             'id': admin.id,
-            'name': admin.name,
+            'username': admin.username,
             'email': admin.email,
         }
         return make_response(jsonify(admin_data), 200)
@@ -261,7 +220,7 @@ def get_admin(id):
             return make_response(jsonify({"message": "Admin not found"}), 404)
         request_data = request.get_json()
 
-        admin.name = request_data.get('name', admin.name)
+        admin.username = request_data.get('username', admin.username)
         admin.email = request_data.get('email', admin.email)
         admin.password = request_data.get('password',admin.password)
 
@@ -286,7 +245,7 @@ def get_donors():
     donors_data = [
         {
             'id': donor.id,
-            'name': donor.name,
+            'username': donor.username,
             'email': donor.email,
             'password':donor.password
         }
@@ -297,11 +256,11 @@ def get_donors():
 @app.route('/donors', methods=['POST'])
 def new_donor():
     request_data = request.get_json()
-    name = request_data.get('name')
+    username = request_data.get('username')
     email = request_data.get('email')
 
 
-    new_donor = Donor(name=name, email=email)
+    new_donor = Donor(username=username, email=email)
     db.session.add(new_donor)
     db.session.commit()
     return make_response(jsonify({"message": "Donor created successfully", "id": new_donor.id}), 201)
@@ -316,7 +275,7 @@ def donor(id):
             return make_response(jsonify({"message": "Donor not found"}), 404)
         donor_data = {
             'id': donor.id,
-            'name': donor.name,
+            'username': donor.username,
             'email': donor.email,
         }
         return make_response(jsonify(donor_data), 200)

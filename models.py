@@ -12,25 +12,25 @@ db = SQLAlchemy(app)
 class Admin(db.Model,SerializerMixin):
     __tablename__ = 'admins'
     id = db.Column(db.Integer(),primary_key=True )
-    name = db.Column(db.String(100))
+    username = db.Column(db.String(100))
     email = db.Column(db.String(50))
     password = db.Column(db.String(50))
     
 
     def __repr__(self):
-        return f'{self.id},{self.name},{self.email},{self.password}'
+        return f'{self.id},{self.username},{self.email},{self.password}'
     def set_password(self, password):
         self.password = generate_password_hash(password)
     
 class Donor(db.Model,SerializerMixin):
     __tablename__= 'donors'
     id = db.Column(db.Integer(),primary_key=True )
-    name = db.Column(db.String(100))
+    username = db.Column(db.String(100))
     email = db.Column(db.String(50))
     password = db.Column(db.String(50))
     
     def __repr__(self):
-        return f'{self.id},{self.name},{self.email}{self.password}'
+        return f'{self.id},{self.username},{self.email}{self.password}'
     def set_password(self, password):
         self.password = generate_password_hash(password)
     
@@ -52,7 +52,7 @@ class Ngo(db.Model,SerializerMixin):
     
     
     def __repr__(self):
-        return f'{self.id},{self.org_name},{self.org_email},{self.org_address},{self.registration_number} {self.location}{self.password}{self.confirm_password}'
+        return f'{self.id},{self.username},{self.email},{self.org_address},{self.registration_number} {self.location}{self.password}{self.confirm_password}'
     
     def set_password(self, password):
         self.password = generate_password_hash(password)
@@ -68,7 +68,7 @@ class Ngo(db.Model,SerializerMixin):
 class Donation(db.Model,SerializerMixin):
     __tablename__ = 'donations'
     id = db.Column(db.Integer(),primary_key= True)
-    username =db.Column(db.String(50))
+    donor_name =db.Column(db.String(50))
     bank_name = db.Column(db.String())
     donated_amount = db.Column(db.Integer())
     date_of_donation = db.Column(db.DateTime,server_default= db.func.now())
@@ -87,8 +87,8 @@ class Donation(db.Model,SerializerMixin):
 class Ngo_donation_request(db.Model,SerializerMixin):
     __tablename__ = 'ngo_donation_requests'
     id = db.Column(db.Integer(), primary_key = True)
-    username = db.Column(db.String(50))
-    email = db.Column(db.String(50))
+    org_name = db.Column(db.String(50))
+    org_email = db.Column(db.String(50))
     project_name = db.Column(db.String(50))
     donation_purpose = db.Column(db.String())
     amount = db.Column(db.Integer())

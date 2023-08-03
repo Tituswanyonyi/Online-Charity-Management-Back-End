@@ -7,19 +7,19 @@ from datetime import datetime
 def seed():
     
     admin1 = Admin(
-        name="Monica",
+        username="Monica",
         email='monica@gmail.com',
     )
     admin1.set_password('password')
 
     admin2 = Admin(
-        name='Benter',
+        username='Benter',
         email='benter@gmail.com',
     )
     admin2.set_password('password')
 
     admin3 = Admin(
-        name='Dan',
+        username='Dan',
         email='dan@gmail.com',
     )
     admin3.set_password('password')
@@ -27,19 +27,19 @@ def seed():
     db.session.commit()
     
     donor1 = Donor(
-        name='Victor',
+        username='Victor',
         email='john@example.com',
     )
     donor1.set_password('password123')
 
     donor2 = Donor(
-        name='Titus',
+        username='Titus',
         email='titus@gmail.com',
     )
     donor2.set_password('myp@ssw0rd')
     
     donor3 = Donor(
-        name='Benta',
+        username='Benta',
         email='benta@gmail.com',
     )
     donor3.set_password('myp@ssw0rd')
@@ -49,8 +49,8 @@ def seed():
     db.session.commit()
     
     ngo1 = Ngo(
-        org_name='Africa Harvest Biotech Foundation International',
-        org_email='Kenya@africaharvest@gmail.com',
+        username='Africa Harvest Biotech Foundation International',
+        email='Kenya@africaharvest@gmail.com',
         org_address='PO Box 642-00621 Nairobi',
         registration_number=12345,
         location='Nairobi',
@@ -59,8 +59,8 @@ def seed():
     ngo1.set_password('ngop@ssw0rd')
 
     ngo2 = Ngo(
-        org_name='EngenderHealth',
-        org_email='info@engenderhealth',
+        username='EngenderHealth',
+        email='info@engenderhealth',
         org_address='PO Box: 57964, Nairobi ',
         registration_number=67890,
         location='ABC Place, Nairobi, Nairobi County, Kenya Waiyaki Way Parklands, Nairobi ',
@@ -99,8 +99,8 @@ def seed():
     db.session.commit()
     
     request1 = Ngo_donation_request(
-        org_name='World Vision',
-        org_email='worldvision@gmail.com',
+        username='World Vision',
+        email='worldvision@gmail.com',
         project_name='Protection of children',
         donation_purpose='Protection and saving chilldren',
         amount=1000,
@@ -111,8 +111,8 @@ def seed():
     )
 
     request2 = Ngo_donation_request(
-        org_name='UNEP',
-        org_email='	unepinfo@unep.org',
+        username='UNEP',
+        email='	unepinfo@unep.org',
         project_name='Environmental Impact Assessment',
         donation_purpose='Environmental protection during construction activities',
         amount=5000000,

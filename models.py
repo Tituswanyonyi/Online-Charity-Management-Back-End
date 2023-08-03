@@ -1,6 +1,7 @@
 
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+
 from sqlalchemy_serializer import SerializerMixin
 from werkzeug.security import generate_password_hash
 app = Flask(__name__)
@@ -38,8 +39,8 @@ class Donor(db.Model,SerializerMixin):
 class Ngo(db.Model,SerializerMixin):
     __tablename__ = 'ngos'
     id = db.Column(db.Integer(),primary_key = True)
-    org_name = db.Column(db.String(100))
-    org_email = db.Column(db.String(50))
+    username = db.Column(db.String(100))
+    email = db.Column(db.String(50))
     org_address = db.Column(db.String())
     registration_number = db.Column(db.Integer())
     location =db.Column(db.String())
@@ -58,7 +59,7 @@ class Ngo(db.Model,SerializerMixin):
 class Donation(db.Model,SerializerMixin):
     __tablename__ = 'donations'
     id = db.Column(db.Integer(),primary_key= True)
-    donor_name =db.Column(db.String(50))
+    username =db.Column(db.String(50))
     bank_name = db.Column(db.String())
     donated_amount = db.Column(db.Integer())
     date_of_donation = db.Column(db.DateTime,server_default= db.func.now())
@@ -77,8 +78,8 @@ class Donation(db.Model,SerializerMixin):
 class Ngo_donation_request(db.Model,SerializerMixin):
     __tablename__ = 'ngo_donation_requests'
     id = db.Column(db.Integer(), primary_key = True)
-    org_name = db.Column(db.String(50))
-    org_email = db.Column(db.String(50))
+    username = db.Column(db.String(50))
+    email = db.Column(db.String(50))
     project_name = db.Column(db.String(50))
     donation_purpose = db.Column(db.String())
     amount = db.Column(db.Integer())

@@ -1,58 +1,222 @@
-from flask import Flask,jsonify,request,make_response
+import os
+from flask import Flask,jsonify,request,make_response,redirect, url_for
 from flask_migrate import Migrate
 from flask_cors import CORS
 from models import Admin,Donor,Ngo,Donation,db,Ngo_donation_request
 import jwt
 from datetime import datetime
 from functools import wraps
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+import bcrypt
+from sqlalchemy.exc import IntegrityError
+import json
 app = Flask(__name__)
 
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///charity_management.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = b'thisisthesecretkey'
+app.config['JWT_SECRET_KEY'] = 'abvsjdgdb'
+jwt = JWTManager(app)
 
 migrate=Migrate(app, db)
 db.init_app(app)
 
 cors = CORS(app)
-def token_required(f):
-    @wraps(f)
-    def decorated(*args,**kwargs):
-        token = request.args.get('token')
-        if not token:
-            return jsonify({'message':'token is missing!'})
-        try:
-            data = jwt.encode(token,app.config['SECRET_KEY'])
-        except:
-            return jsonify({'message':'token is invalid'})
-        return f(*args,**kwargs)
-    return decorated
+# def token_required(f):
+#     @wraps(f)
+#     def decorated(*args,**kwargs):
+#         token = request.args.get('token')
+#         if not token:
+#             return jsonify({'message':'token is missing!'})
+#         try:
+#             data = jwt.encode(token,app.config['SECRET_KEY'])
+#         except:
+#             return jsonify({'message':'token is invalid'})
+#         return f(*args,**kwargs)
+#     return decorated
             
                 
             
-@app.route('/unprotected')
-def unprotected():
-    return ({'message':'available for everyone'})
-@app.route('/protected')
-def protected():
-    return ({'message':'only available for people with valid tokens'})
+# @app.route('/unprotected')
+# def unprotected():
+#     return ({'message':'available for everyone'})
+# @app.route('/protected')
+# def protected():
+#     return ({'message':'only available for people with valid tokens'})
+
+# @app.route('/register')
+
+# @app.route('/login',methods = ['POST'])
+# def login():
+#     auth = request.authorization
+#     if auth and auth.password == '@d1234':
+#         token = jwt.encode({'user':auth.username,'exp':datetime.datetime.utcnow()+datetime.timedelta(minutes=30)},app.config['SECRET_KEY'])
+#         return jsonify({'token': token})
+#     return make_response('could not verify',401, {'WWW-Authenticate':'Basic realm="login Requires"'})
 
 
-@app.route('/login',methods = ['POST'])
-def login():
-    auth = request.authorization
-    if auth and auth.password == '@d1234':
-        token = jwt.encode({'user':auth.username,'exp':datetime.datetime.utcnow()+datetime.timedelta(minutes=30)},app.config['SECRET_KEY'])
-        return jsonify({'token': token})
-    return make_response('could not verify',401, {'WWW-Authenticate':'Basic realm="login Requires"'})
-
-
-@app.route('/signup')
+# @app.route('/signup')
+# def signup():
+#     return 'Signup'
+# @app.route('/logout')
+# @app.route('/about.js')
+# def serve_js():
+#     path = os.path.join(os.path.dirname(__file__), 'src', 'component')
+#     filename = 'About.js'
+#     return send_from_directory(path, filename)
+USER_TYPES = ['admin', 'ngo', 'donor']
+@app.route('/signup', methods=['POST'])
 def signup():
-    return 'Signup'
-@app.route('/logout')
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "No JSON data provided in the request body"}), 400
 
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+        user_type = data.get('user_type')
+
+        missing_fields = []
+        if not username:
+            missing_fields.append("username")
+        if not email:
+            missing_fields.append("email")
+        if not password:
+            missing_fields.append("password")
+        if not user_type:
+            missing_fields.append("user_type")
+
+        if missing_fields:
+            return jsonify({"message": f"Missing fields: {', '.join(missing_fields)}"}), 400
+
+        if user_type.lower() not in USER_TYPES:
+            return jsonify({"message": "Invalid userType. Choose from 'admin', 'ngo', or 'donor'"}), 400
+
+        salt = bcrypt.gensalt()
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+
+        new_user = None
+
+        if user_type.lower() == 'admin':
+            new_user = Admin(name=username, email=email, password=hashed_password)
+        elif user_type.lower() == 'ngo':
+            new_user = Ngo(username=username, email=email, password=hashed_password)
+        elif user_type.lower() == 'donor':
+            new_user = Donor(name=username, email=email, password=hashed_password)
+        else:
+            return jsonify({"message": "Invalid userType"}), 400
+
+        db.session.add(new_user)
+        db.session.commit()
+
+        access_token = create_access_token(identity={"email": email})
+        return jsonify({"message": "User registered successfully", "access_token": access_token}), 201
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"message": "User Already Exists"}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": f"An error occurred: {str(e)}"}), 500
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        print(data)
+
+        email = data.get('email')
+        password = data.get('password')
+
+        if not email or not password:
+            return jsonify({"message": "Provide an email and password in JSON format in the request body"}), 400
+
+        user_instance = None
+        user_type = None
+
+        admin = Admin.query.filter_by(email=email).first()
+        ngo = Ngo.query.filter_by(email=email).first()
+        donor = Donor.query.filter_by(email=email).first()
+
+        if admin:
+            user_instance = admin
+            user_type = 'admin'
+        elif ngo:
+            user_instance = ngo
+            user_type = 'ngo'
+        elif donor:
+            user_instance = donor
+            user_type = 'donor'
+        else:
+            return jsonify({"message": "User not found"}), 404
+
+        if bcrypt.check_password_hash(user_instance.password, password):
+            access_token = create_access_token(identity={"email": email})
+            
+            db.session.add(user_instance)
+            db.session.commit()
+            
+            return jsonify({
+                "message": f"Logged in successfully as {user_type}",
+                "access_token": access_token
+            }), 200
+        else:
+            return jsonify({"message": "Invalid login credentials"}), 401
+    except AttributeError:
+        return jsonify({"message": "Provide an email and password in JSON format in the request body"}), 400
+
+@app.route('/admin/dashboard')
+def admin_dashboard():
+    return jsonify({"message": "Welcome to the Admin dashboard"}), 200
+
+@app.route('/ngo/dashboard')
+def ngo_dashboard():
+    return jsonify({"message": "Welcome to the NGO dashboard"}), 200
+
+@app.route('/donor/dashboard')
+def donor_dashboard():
+    return jsonify({"message": "Welcome to the Donor dashboard"}), 200
+
+
+# @jwt_required
+# def test():
+#     user = get_jwt_identity()
+#     print(user)
+#     return "secret data!",200
+@app.route('/dashboard', methods=['GET'])
+@jwt_required
+def dashboard():
+    user = get_jwt_identity()
+
+    if user.get('email'):
+        user_instance = None
+
+        # Determine user type based on the user's email
+        admin = Admin.query.filter_by(email=user['email']).first()
+        ngo = Ngo.query.filter_by(email=user['email']).first()
+        donor = Donor.query.filter_by(email=user['email']).first()
+
+        if admin:
+            user_instance = admin
+            user_type = 'admin'
+        elif ngo:
+            user_instance = ngo
+            user_type = 'ngo'
+        elif donor:
+            user_instance = donor
+            user_type = 'donor'
+
+        if user_instance:
+            return jsonify({"message": f"Welcome to the {user_type.capitalize()} dashboard", "user_data": user_instance.serialize()}), 200
+        else:
+            return jsonify({"message": "User not found"}), 404
+    else:
+        return jsonify({"message": "Invalid user data"}), 400
+
+
+    
 @app.route('/admins', methods=['GET'])
 def get_admins():
     admins = Admin.query.all()
@@ -177,8 +341,8 @@ def ngos():
         ngos_data = [
             {
                 'id': ngo.id,
-                'org_name': ngo.org_name,
-                'org_email': ngo.org_email,
+                'username': ngo.username,
+                'email': ngo.email,
                 'org_address': ngo.org_address,
                 'registration_number': ngo.registration_number,
                 'location': ngo.location,
@@ -189,19 +353,18 @@ def ngos():
         return make_response(jsonify(ngos_data), 200)
     elif request.method == 'POST':
         request_data = request.get_json()
-        org_name = request_data.get('org_name')
-        org_email = request_data.get('org_email')
+        username = request_data.get('org_name')
+        email = request_data.get('org_email')
         org_address = request_data.get('org_address')
         registration_number = request_data.get('registration_number')
         location = request_data.get('location')
         password = request_data.get('password')
         confirm_password = request_data.get('confirm_password')
 
-        # Perform necessary validation on the data fields (you can add more)
 
         new_ngo = Ngo(
-            org_name=org_name,
-            org_email=org_email,
+            username=username,
+            email=email,
             org_address=org_address,
             registration_number=registration_number,
             location=location,
@@ -227,8 +390,8 @@ def ngo(id):
     if request.method == 'GET':
         ngo_data = {
             'id': ngo.id,
-            'org_name': ngo.org_name,
-            'org_email': ngo.org_email,
+            'username': ngo.username,
+            'email': ngo.email,
             'org_address': ngo.org_address,
             'registration_number': ngo.registration_number,
             'location': ngo.location,
@@ -236,8 +399,8 @@ def ngo(id):
         return make_response(jsonify(ngo_data), 200)
     elif request.method == 'PATCH':
         request_data = request.get_json()
-        ngo.org_name = request_data.get('org_name', ngo.org_name)
-        ngo.org_email = request_data.get('org_email', ngo.org_email)
+        ngo.username = request_data.get('username', ngo.username)
+        ngo.email = request_data.get('email', ngo.org_email)
         ngo.org_address = request_data.get('org_address', ngo.org_address)
         ngo.registration_number = request_data.get('registration_number', ngo.registration_number)
         ngo.location = request_data.get('location', ngo.location)
@@ -433,7 +596,7 @@ def ngo_donation_requests_by_id(id):
         ngo_donation_requests.ngo_id = request_data.get('ngo_id', ngo_donation_requests.ngo_id)
         ngo_donation_requests.admin_id = request_data.get('admin_id', ngo_donation_requests.admin_id)
 
-        # Perform necessary validation on the data fields (you can add more)
+      
 
         db.session.commit()
         return make_response(jsonify({"message": "Ngo donation request updated successfully"}), 200)

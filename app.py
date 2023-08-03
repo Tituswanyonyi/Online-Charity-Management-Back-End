@@ -6,10 +6,15 @@ from models import Admin,Donor,Ngo,Donation,db,Ngo_donation_request
 import jwt
 from datetime import datetime
 from functools import wraps
+<<<<<<< HEAD
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import bcrypt
 from sqlalchemy.exc import IntegrityError
 import json
+=======
+import re
+
+>>>>>>> main
 app = Flask(__name__)
 
 
@@ -237,6 +242,22 @@ def create_admin():
     email = request_data.get('email')
     password = request_data.get('password')
 
+<<<<<<< HEAD
+=======
+    # Perform necessary validation on name and email fields (you can add more)
+# class email_address():
+#     __tablename__ = 'address'    
+#     @validates ('email')
+
+#     id 
+#     email = db.column(db.String)
+
+#     def validate_email(self, key, address)
+#         if '@' not in address:
+#             raise valueError('Error while validating')
+#         return address
+    
+>>>>>>> main
     new_admin = Admin(name=name, email=email,password = password)
 
     db.session.add(new_admin)
@@ -244,6 +265,8 @@ def create_admin():
 
     return make_response(jsonify({"message": "Admin created successfully", "id": new_admin.id}), 201)
     
+    
+
 @app.route('/admins/<int:id>',methods = ['GET', 'PATCH','DELETE'])
 def get_admin(id):
     admin = Admin.query.filter(id==id).first()
@@ -351,6 +374,15 @@ def ngos():
         ]
 
         return make_response(jsonify(ngos_data), 200)
+
+    # def is_valid_email(email):
+    #     email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    #     return re.match(email_regex, email)
+    # def is_valid_password(password):
+    # # Basic password validation: at least 8 characters, one uppercase, one lowercase, and one digit
+    #     return len(password) >= 8 and any(char.isupper() for char in password) and \
+    #         any(char.islower() for char in password) and any(char.isdigit() for char in password)
+
     elif request.method == 'POST':
         request_data = request.get_json()
         username = request_data.get('org_name')
@@ -361,6 +393,23 @@ def ngos():
         password = request_data.get('password')
         confirm_password = request_data.get('confirm_password')
 
+<<<<<<< HEAD
+=======
+        def is_valid_email(email):
+            email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            return re.match(email_regex, email)
+        if not (org_name and org_email and org_address and registration_number and location and password and confirm_password):
+                return make_response(jsonify({"error": "All fields are required."}), 400)
+    # Validate email format using regular expression
+        if not is_valid_email(org_email):
+            make_response(jsonify({"error": "Invalid email format."}), 400)
+    # Validate password format
+        # if not is_valid_password(password):
+        #     return make_response(jsonify({"error": "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one digit."}), 400)
+        # if password != confirm_password:
+        #     return make_response(jsonify({"error": "Passwords do not match."}), 400)
+        # Perform necessary validation on the data fields (you can add more)
+>>>>>>> main
 
         new_ngo = Ngo(
             username=username,

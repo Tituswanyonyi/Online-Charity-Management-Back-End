@@ -16,6 +16,7 @@ class Admin(db.Model,SerializerMixin):
     email = db.Column(db.String(50))
     password = db.Column(db.String(50))
     
+    
 
     def __repr__(self):
         return f'{self.id},{self.username},{self.email},{self.password}'
@@ -28,6 +29,9 @@ class Donor(db.Model,SerializerMixin):
     username = db.Column(db.String(100))
     email = db.Column(db.String(50))
     password = db.Column(db.String(50))
+    
+
+    
     
     def __repr__(self):
         return f'{self.id},{self.username},{self.email}{self.password}'
@@ -45,8 +49,10 @@ class Ngo(db.Model,SerializerMixin):
     org_address = db.Column(db.String())
     registration_number = db.Column(db.Integer())
     location =db.Column(db.String())
+    image_url = db.Column(db.String())
     password = db.Column(db.String(50))
     confirm_password = db.Column(db.String())
+   
     donor_id = db.Column(db.Integer, db.ForeignKey('donors.id'))
     donor = db.relationship('Donor', backref='ngos')
     
@@ -64,7 +70,10 @@ class Ngo(db.Model,SerializerMixin):
     # Basic password validation: at least 8 characters, one uppercase, one lowercase, and one digit
         return len(password) >= 8 and any(char.isupper() for char in password) and \
             any(char.islower() for char in password) and any(char.isdigit() for char in password)
-
+    # def upload_image_to_cloudinary(self,image_file):
+    #     response = cloudinary.uploader.upload(image_file)
+    #     self.image_url=response["secure_url"]
+        
 class Donation(db.Model,SerializerMixin):
     __tablename__ = 'donations'
     id = db.Column(db.Integer(),primary_key= True)

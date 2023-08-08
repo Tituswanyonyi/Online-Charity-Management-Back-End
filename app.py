@@ -1,77 +1,96 @@
 import os
+# from cloudinary.uploader import upload
+import base64
+import requests
+from datetime import datetime
+from requests.auth import HTTPBasicAuth
 from flask import Flask,jsonify,request,make_response,current_app
 from flask_migrate import Migrate
 from flask_cors import CORS
 from models import Admin,Donor,Ngo,Donation,db,Ngo_donation_request
 import jwt
-from datetime import datetime,timedelta
+from datetime import datetime
 from werkzeug.security import generate_password_hash,check_password_hash
-
-
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask_mail import Message,Mail
+from config import Config
+from flask_jwt_extended import JWTManager, create_access_token
 import bcrypt
-from sqlalchemy.exc import IntegrityError
+import cloudinary
+# import cloudinary.uploader
+from werkzeug.utils import secure_filename
+
+from dotenv import load_dotenv
+load_dotenv()
 app = Flask(__name__)
-jwt = JWTManager(app)
-
-
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///charity_management.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = 'abvsjdgdb'
+cloudinary.config(
+    cloud_name='de2douzby',
+    api_key='483724135818845',
+    api_secret='t7-8D3imhX3u4T8ur9hVhAxFUFM'
+)
 
 
+jwt = JWTManager(app)
+app.config.from_object(Config)
+mail = Mail(app)
 migrate=Migrate(app, db)
 db.init_app(app)
-
 cors = CORS(app)
-# def token_required(f):
-#     @wraps(f)
-#     def decorated(*args,**kwargs):
-#         token = request.args.get('token')
-#         if not token:
-#             return jsonify({'message':'token is missing!'})
-#         try:
-#             data = jwt.encode(token,app.config['SECRET_KEY'])
-#         except:
-#             return jsonify({'message':'token is invalid'})
-#         return f(*args,**kwargs)
-#     return decorated
+
+
+UPLOAD_FOLDER = '/home/moringa/Desktop/code/phase-5/Online-Charity-Management-Back-End'
+ALLOWED_EXTENSIONS = set(['txt','pdf','png','jpg','gif'])
+def allowed_file(filename):
+    return '.'in filename and filename.rsplit('.',1)[1].lower()in ALLOWED_EXTENSIONS
+app.config['UPLOAD_FOLDER']= UPLOAD_FOLDER
+
+
+@app.route('/upload',methods=['POST'])
+def upload_media():
+    if 'file' not in request.files:
+        return jsonify({'error':'media not provided'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error':'no file selected'}),400
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'],filename))
+        return jsonify({'msg':'media uploaded successfully'})
+        
+         
+# cloudinary.config(cloud_name = os.getenv('CLOUD_NAME'), api_key=os.getenv('API_KEY'), 
+#     api_secret=os.getenv('API_SECRET'))
+
+
+# cloudinary.config(
+#     cloud_name='your_cloud_name',
+#     api_key='123456789we',
+#     api_secret='thisisthesecret'
+# )
+
+# # Upload an image
+# file_path = os.path.abspath("Desktop/code/phase-5/Online-Charity-Management-Back-End")
+# result = upload(file_path)
+# from werkzeug.utils import secure_filename
+# UPLOAD_FOLDER = '/home/moringa/Desktop/code/phase-5/Online-Charity-Management-Back-End'
+# ALLOWED_EXTENSIONS = set(['txt','pdf','png','jpg','gif'])
+# def allowed_file(filename):
+#     return '.'in filename and filename.rsplit('.',1)[1].lower()in ALLOWED_EXTENSIONS
+
+
+
+
             
-                
-            
-# @app.route('/unprotected')
-# def unprotected():
-#     return ({'message':'available for everyone'})
-# @app.route('/protected')
-# def protected():
-#     return ({'message':'only available for people with valid tokens'})
 
-# @app.route('/register')
-
-# @app.route('/login',methods = ['POST'])
-# def login():
-#     auth = request.authorization
-#     if auth and auth.password == '@d1234':
-#         token = jwt.encode({'user':auth.username,'exp':datetime.datetime.utcnow()+datetime.timedelta(minutes=30)},app.config['SECRET_KEY'])
-#         return jsonify({'token': token})
-#     return make_response('could not verify',401, {'WWW-Authenticate':'Basic realm="login Requires"'})
-
-
-# @app.route('/signup')
-# def signup():
-#     return 'Signup'
-# @app.route('/logout')
-# @app.route('/about.js')
-# def serve_js():
-#     path = os.path.join(os.path.dirname(__file__), 'src', 'component')
-#     filename = 'About.js'
-#     return send_from_directory(path, filename)
 USER_TYPES = ['admin', 'ngo', 'donor']
 USER_TYPE_CLASSES = {
     'admin': Admin,
     'ngo': Ngo,
     'donor': Donor
 }
+
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json()
@@ -81,8 +100,8 @@ def signup():
     password = data.get('password')
     user_type = data.get('user_type')
 
-    if not username or not email or not password or not user_type:
-        return jsonify({'error': 'Please provide username, email, password, and user_type.',
+    if not all([username, email, password, user_type]):
+        return jsonify({'error': 'Missing required fields.',
                         'responseCode': 400}), 400
 
     user_class = USER_TYPE_CLASSES.get(user_type.lower())
@@ -90,22 +109,28 @@ def signup():
         return jsonify({'error': 'Invalid user_type.',
                         'responseCode': 400}), 400
 
-    if user_class.query.filter_by(username=username).first():
-        return jsonify({'error': 'Username already exists',
-                        'responseCode': 409}), 409
-    if user_class.query.filter_by(email=email).first():
-        return jsonify({'error': 'Email already exists',
-                        'responseCode': 409}), 409
     hashed_password = generate_password_hash(password)
     new_user = user_class(username=username, email=email, password=hashed_password)
     db.session.add(new_user)
     db.session.commit()
 
-    # Generate an access token for the newly created user
-    access_token = create_access_token(identity={'username': username, 'user_type': user_type})
+    welcome_message = f"Welcome, {username}! You have successfully registered."
 
-    # Return the token along with the response
-    return jsonify({'message': 'User created successfully.', 'access_token': access_token, 'responseCode': 200}), 200
+    return jsonify({'message': welcome_message,
+                    'responseCode': 201}), 201
+
+
+
+# @app.route('/verify_email/<token>', methods=['GET'])
+# def verify_email(token):
+#     user = user_class.query.filter_by(verification_token=token).first()
+#     if user:
+#         user.verification_token = None
+#         user.is_verified = True
+#         db.session.commit()
+#         return render_template('email_verified.html', message='Email verification successful!')
+#     else:
+#         return render_template('email_verified.html', message='Invalid or expired verification token.')
 @app.route('/login', methods=['POST'])
 def login():
     username = request.json.get('username')
@@ -126,56 +151,74 @@ def login():
     else:
         return jsonify({'error': 'Invalid username or password.'}), 401
 
-@app.route('/admin/dashboard')
-def admin_dashboard():
-    return jsonify({"message": "Welcome to the Admin dashboard"}), 200
 
-@app.route('/ngo/dashboard')
-def ngo_dashboard():
-    return jsonify({"message": "Welcome to the NGO dashboard"}), 200
+my_endpoint = 'https://ab92-102-213-93-55.ngrok-free.app'
+@app.route('/pay',methods=['POST'])
+def MpesaExpress():
+    if request.method == 'POST':
+        data = request.get_json()
+        amount = data.get('amount')
+        phoneNumber = data.get('phoneNumber')
+        print(phoneNumber)
+        # Safaricom M-Pesa API request
+        endpoint = 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
+        access_token = getAccessToken()  # Assuming you have this function implemented to get the access token
+        headers = {"Authorization": "Bearer %s" % access_token}
+        Timestamp = datetime.now()
+        times = Timestamp.strftime("%Y%m%d%H%M%S")
+        password_str = "174379" + "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919" + times
+        password_bytes = password_str.encode('utf-8')
+        password = base64.b64encode(password_bytes).decode('utf-8')
+        # password = hashlib.sha1(password_bytes).hexdigest()
+    data = {
+        "BusinessShortCode": "174379",
+        "Password": password,
+        "Timestamp": times,
+        "TransactionType": "CustomerPayBillOnline",
+        "PartyA": phoneNumber,
+        "PartyB": "174379",
+        "PhoneNumber":phoneNumber,
+        "CallBackURL": my_endpoint + '/lnmo-callback',
+        "AccountReference": "TestPay",
+        "TransactionDesc": "HelloTest",
+        "Amount": amount
+    }
+    res = requests.post(endpoint, json=data, headers=headers)
+    print(res)
+    response_json = res.json()
+@app.route('/lnmo-callback', methods=['POST'])
+def incoming():
+    data = request.get_json()
+    print(data)
+    return 'ok'
 
-@app.route('/donor/dashboard')
-def donor_dashboard():
-    return jsonify({"message": "Welcome to the Donor dashboard"}), 200
+def getAccessToken():
+    consumer_key = "k32F8H8rh9CHOxGhuQCqqKALJRF1aAz0"
+    consumer_secret = "FwyAyldHKLpzdKnH"
+    endpoint = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
+    r = requests.get(endpoint, auth=HTTPBasicAuth(consumer_key, consumer_secret))
+    data = r.json()
+    return data['access_token']
 
 
-# @jwt_required
-# def test():
-#     user = get_jwt_identity()
-#     print(user)
-#     return "secret data!",200
-# @app.route('/dashboard', methods=['GET'])
-# @jwt_required
-# def dashboard():
-#     user = get_jwt_identity()
+@app.route("/upload", methods=['POST'])
+def upload_file():
+  app.logger.info('in upload route')
 
-#     if user.get('email'):
-#         user_instance = None
-
-#         # Determine user type based on the user's email
-#         admin = Admin.query.filter_by(email=user['email']).first()
-#         ngo = Ngo.query.filter_by(email=user['email']).first()
-#         donor = Donor.query.filter_by(email=user['email']).first()
-
-#         if admin:
-#             user_instance = admin
-#             user_type = 'admin'
-#         elif ngo:
-#             user_instance = ngo
-#             user_type = 'ngo'
-#         elif donor:
-#             user_instance = donor
-#             user_type = 'donor'
-
-#         if user_instance:
-#             return jsonify({"message": f"Welcome to the {user_type.capitalize()} dashboard", "user_data": user_instance.serialize()}), 200
-#         else:
-#             return jsonify({"message": "User not found"}), 404
-#     else:
-#         return jsonify({"message": "Invalid user data"}), 400
+  cloudinary.config(cloud_name = os.getenv('CLOUD_NAME'), api_key=os.getenv('API_KEY'), 
+    api_secret=os.getenv('API_SECRET'))
+  upload_result = None
+  if request.method == 'POST':
+    file_to_upload = request.files['file']
+    app.logger.info('%s file_to_upload', file_to_upload)
+    if file_to_upload:
+      upload_result = cloudinary.uploader.upload(file_to_upload)
+      app.logger.info(upload_result)
+      return jsonify(upload_result)
 
 
-    
+
+   
 @app.route('/admins', methods=['GET'])
 def get_admins():
     admins = Admin.query.all()
@@ -305,6 +348,7 @@ def ngos():
                 'org_address': ngo.org_address,
                 'registration_number': ngo.registration_number,
                 'location': ngo.location,
+                'is_verified': ngo.is_verified,
             }
             for ngo in ngos
         ]
@@ -319,6 +363,7 @@ def ngos():
         location = request_data.get('location')
         password = request_data.get('password')
         confirm_password = request_data.get('confirm_password')
+        is_verified = request_data.get('is_verified')
 
 
         new_ngo = Ngo(
@@ -328,7 +373,10 @@ def ngos():
             registration_number=registration_number,
             location=location,
             password=password,
-            confirm_password=confirm_password
+            confirm_password=confirm_password,
+            is_verified=False
+            
+            
         )
 
         db.session.add(new_ngo)
@@ -358,8 +406,8 @@ def ngo(id):
         return make_response(jsonify(ngo_data), 200)
     elif request.method == 'PATCH':
         request_data = request.get_json()
-        ngo.username = request_data.get('username', ngo.username)
-        ngo.email = request_data.get('email', ngo.org_email)
+        username = request_data.get('ngo.username')
+        email = request_data.get('ngo.email' )
         ngo.org_address = request_data.get('org_address', ngo.org_address)
         ngo.registration_number = request_data.get('registration_number', ngo.registration_number)
         ngo.location = request_data.get('location', ngo.location)
@@ -501,7 +549,7 @@ def ngo_donation_requests():
         ngo_id = request_data.get('ngo_id')
         admin_id = request_data.get('admin_id')
 
-        # Perform necessary validation on the data fields (you can add more)
+        
         new_request = ngo_donation_requests(
             org_name=org_name,
             org_email=org_email,
@@ -571,10 +619,3 @@ def ngo_donation_requests_by_id(id):
 
 
 
-# input validators
-# validate input for email in the login
-# validate password
-# authentication using JWT 
-# authentication for NGo,
-# /login,/register,/signup, logout,then will directed to NGO dashboard
-# import redirect and JWT 

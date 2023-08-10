@@ -1,11 +1,15 @@
 import os
-from flask import Flask,jsonify,request,make_response,current_app
+import requests
+from requests.auth import HTTPBasicAuth
+import base64
+# import hashlib
+from flask import Flask, jsonify, request, make_response, current_app
 from flask_migrate import Migrate
 from flask_cors import CORS
-from models import Admin,Donor,Ngo,Donation,db,Ngo_donation_request
+from models import Admin, Donor, Ngo, Donation, db, Ngo_donation_request
 import jwt
-from datetime import datetime,timedelta
-from werkzeug.security import generate_password_hash,check_password_hash
+from datetime import datetime, timedelta
+from werkzeug.security import generate_password_hash, check_password_hash
 
 
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -20,10 +24,13 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = 'abvsjdgdb'
 
 
-migrate=Migrate(app, db)
+migrate = Migrate(app, db)
 db.init_app(app)
+CORS(app, resources={r"/signup": {"origins": "http://localhost:3000"}})
 
-cors = CORS(app)
+CORS(app, resources={r"/login": {"origins": "http://localhost:3000"}})
+
+CORS(app)
 # def token_required(f):
 #     @wraps(f)
 #     def decorated(*args,**kwargs):
@@ -36,9 +43,8 @@ cors = CORS(app)
 #             return jsonify({'message':'token is invalid'})
 #         return f(*args,**kwargs)
 #     return decorated
-            
-                
-            
+
+
 # @app.route('/unprotected')
 # def unprotected():
 #     return ({'message':'available for everyone'})
@@ -72,6 +78,8 @@ USER_TYPE_CLASSES = {
     'ngo': Ngo,
     'donor': Donor
 }
+
+
 @app.route('/signup', methods=['POST'])
 def signup():
     data = request.get_json()
@@ -97,20 +105,24 @@ def signup():
         return jsonify({'error': 'Email already exists',
                         'responseCode': 409}), 409
     hashed_password = generate_password_hash(password)
-    new_user = user_class(username=username, email=email, password=hashed_password)
+    new_user = user_class(username=username, email=email,
+                          password=hashed_password)
     db.session.add(new_user)
     db.session.commit()
 
     # Generate an access token for the newly created user
-    access_token = create_access_token(identity={'username': username, 'user_type': user_type})
+    access_token = create_access_token(
+        identity={'username': username, 'user_type': user_type})
 
     # Return the token along with the response
     return jsonify({'message': 'User created successfully.', 'access_token': access_token, 'responseCode': 200}), 200
+
+
 @app.route('/login', methods=['POST'])
 def login():
     username = request.json.get('username')
     password = request.json.get('password')
-    user_type = request.json.get('user_type')  
+    user_type = request.json.get('user_type')
 
     if not username or not password or not user_type:
         return jsonify({'error': 'Username, password, and user_type are required.'}), 400
@@ -120,19 +132,24 @@ def login():
         return jsonify({'error': 'Invalid user_type.'}), 400
 
     user = user_class.query.filter_by(username=username).first()
-    if user and check_password_hash(user.password, password):  # Check the password using bcrypt
-        access_token = create_access_token(identity={'username': username, 'user_type': user_type})
+    # Check the password using bcrypt
+    if user and check_password_hash(user.password, password):
+        access_token = create_access_token(
+            identity={'username': username, 'user_type': user_type})
         return jsonify({'access_token': access_token}), 200
     else:
         return jsonify({'error': 'Invalid username or password.'}), 401
+
 
 @app.route('/admin/dashboard')
 def admin_dashboard():
     return jsonify({"message": "Welcome to the Admin dashboard"}), 200
 
+
 @app.route('/ngo/dashboard')
 def ngo_dashboard():
     return jsonify({"message": "Welcome to the NGO dashboard"}), 200
+
 
 @app.route('/donor/dashboard')
 def donor_dashboard():
@@ -175,7 +192,6 @@ def donor_dashboard():
 #         return jsonify({"message": "Invalid user data"}), 400
 
 
-    
 @app.route('/admins', methods=['GET'])
 def get_admins():
     admins = Admin.query.all()
@@ -189,6 +205,8 @@ def get_admins():
     ]
 
     return make_response(jsonify(admins_data), 200)
+
+
 @app.route('/admins', methods=['POST'])
 def create_admin():
     request_data = request.get_json()
@@ -196,19 +214,20 @@ def create_admin():
     email = request_data.get('email')
     password = request_data.get('password')
 
-    new_admin = Admin(username=username, email=email,password = password)
+    new_admin = Admin(username=username, email=email, password=password)
 
     db.session.add(new_admin)
     db.session.commit()
 
     return make_response(jsonify({"message": "Admin created successfully", "id": new_admin.id}), 201)
-    
-@app.route('/admins/<int:id>',methods = ['GET', 'PATCH','DELETE'])
+
+
+@app.route('/admins/<int:id>', methods=['GET', 'PATCH', 'DELETE'])
 def get_admin(id):
-    admin = Admin.query.filter(id==id).first()
+    admin = Admin.query.filter(id == id).first()
     if request.method == 'GET':
         if not admin:
-            return make_response(jsonify({"message": "Admin not found", "id":"admin_id"}), 404)
+            return make_response(jsonify({"message": "Admin not found", "id": "admin_id"}), 404)
         admin_data = {
             'id': admin.id,
             'username': admin.username,
@@ -222,7 +241,7 @@ def get_admin(id):
 
         admin.username = request_data.get('username', admin.username)
         admin.email = request_data.get('email', admin.email)
-        admin.password = request_data.get('password',admin.password)
+        admin.password = request_data.get('password', admin.password)
 
         db.session.commit()
 
@@ -238,8 +257,9 @@ def get_admin(id):
 
     else:
         return make_response(jsonify({"message": "Method not allowed"}), 405)
-       
-@app.route('/donors', methods = ['GET', 'POST'])
+
+
+@app.route('/donors', methods=['GET', 'POST'])
 def get_donors():
     donors = Donor.query.all()
     donors_data = [
@@ -247,18 +267,19 @@ def get_donors():
             'id': donor.id,
             'username': donor.username,
             'email': donor.email,
-            'password':donor.password
+            'password': donor.password
         }
-        for donor in donors 
+        for donor in donors
     ]
 
     return make_response(jsonify(donors_data), 200)
+
+
 @app.route('/donors', methods=['POST'])
 def new_donor():
     request_data = request.get_json()
     username = request_data.get('username')
     email = request_data.get('email')
-
 
     new_donor = Donor(username=username, email=email)
     db.session.add(new_donor)
@@ -292,6 +313,7 @@ def donor(id):
     else:
         return make_response(jsonify({"message": "Method not allowed"}), 405)
 
+
 @app.route('/ngos', methods=['GET', 'POST'])
 def ngos():
     if request.method == 'GET':
@@ -320,7 +342,6 @@ def ngos():
         password = request_data.get('password')
         confirm_password = request_data.get('confirm_password')
 
-
         new_ngo = Ngo(
             username=username,
             email=email,
@@ -338,7 +359,8 @@ def ngos():
 
     else:
         return make_response(jsonify({"message": "Method not allowed"}), 405)
-    
+
+
 @app.route('/ngos/<int:id>', methods=['GET', 'PATCH', 'DELETE'])
 def ngo(id):
     ngo = Ngo.query.filter_by(id=id).first()
@@ -361,9 +383,9 @@ def ngo(id):
         ngo.username = request_data.get('username', ngo.username)
         ngo.email = request_data.get('email', ngo.org_email)
         ngo.org_address = request_data.get('org_address', ngo.org_address)
-        ngo.registration_number = request_data.get('registration_number', ngo.registration_number)
+        ngo.registration_number = request_data.get(
+            'registration_number', ngo.registration_number)
         ngo.location = request_data.get('location', ngo.location)
-
 
         db.session.commit()
 
@@ -376,8 +398,8 @@ def ngo(id):
     else:
         return make_response(jsonify({"message": "Method not allowed"}), 405)
 
-@app.route('/donations',methods = ['GET', 'POST'])
 
+@app.route('/donations', methods=['GET', 'POST'])
 def get_all_donation():
     if request.method == 'GET':
         donations = Donation.query.all()
@@ -424,9 +446,7 @@ def get_all_donation():
         return make_response(jsonify({"message": "Donation made successfully", "id": new_donation.id}), 201)
 
 
-
-
-@app.route('/donations/<int:id>', methods=['GET',  'PATCH','DELETE'])
+@app.route('/donations/<int:id>', methods=['GET',  'PATCH', 'DELETE'])
 def get_donation_by_id(id):
     donation = Donation.query.filter_by(id=id).first()
 
@@ -448,15 +468,17 @@ def get_donation_by_id(id):
         return make_response(jsonify(donation_data), 200)
     elif request.method == 'PATCH':
         request_data = request.get_json()
-        donation.donor_name = request_data.get('donor_name', donation.donor_name)
+        donation.donor_name = request_data.get(
+            'donor_name', donation.donor_name)
         donation.bank_name = request_data.get('bank_name', donation.bank_name)
-        donation.donated_amount = request_data.get('donated_amount', donation.donated_amount)
-        donation.date_of_donation = request_data.get('date_of_donation', donation.date_of_donation)
+        donation.donated_amount = request_data.get(
+            'donated_amount', donation.donated_amount)
+        donation.date_of_donation = request_data.get(
+            'date_of_donation', donation.date_of_donation)
         donation.balance = request_data.get('balance', donation.balance)
         donation.donor_id = request_data.get('donor_id', donation.donor_id)
         donation.ngo_id = request_data.get('ngo_id', donation.ngo_id)
         donation.admin_id = request_data.get('admin_id', donation.admin_id)
-
 
         db.session.commit()
         return make_response(jsonify({"message": "Donation made successfully"}), 200)
@@ -469,7 +491,7 @@ def get_donation_by_id(id):
         return make_response(jsonify({"message": "Method not allowed"}), 405)
 
 
-@app.route('/ngo_donation_requests',methods = ['GET', 'POST'])
+@app.route('/ngo_donation_requests', methods=['GET', 'POST'])
 def ngo_donation_requests():
     if request.method == 'GET':
         ngo_donation_requests = Ngo_donation_request.query.all()
@@ -513,7 +535,6 @@ def ngo_donation_requests():
             admin_id=admin_id
         )
 
-        
         db.session.add(new_request)
         db.session.commit()
         return make_response(jsonify({"message": "Ngo donation request created successfully", "id": new_request.id}), 201)
@@ -522,8 +543,7 @@ def ngo_donation_requests():
         return make_response(jsonify({"message": "Method not allowed"}), 405)
 
 
-@app.route('/ngo_donation_requests/<int:id>',methods =['GET','PATCH','DELETE'])
-
+@app.route('/ngo_donation_requests/<int:id>', methods=['GET', 'PATCH', 'DELETE'])
 def ngo_donation_requests_by_id(id):
     ngo_donation_requests = Ngo_donation_request.query.filter_by(id=id).first()
 
@@ -546,16 +566,22 @@ def ngo_donation_requests_by_id(id):
 
     elif request.method == 'PATCH':
         request_data = request.get_json()
-        ngo_donation_requests.org_name = request_data.get('org_name', ngo_donation_requests.org_name)
-        ngo_donation_requests.org_email = request_data.get('org_email', ngo_donation_requests.org_email)
-        ngo_donation_requests.project_name = request_data.get('project_name', ngo_donation_requests.project_name)
-        ngo_donation_requests.donation_purpose = request_data.get('donation_purpose', ngo_donation_requests.donation_purpose)
-        ngo_donation_requests.amount = request_data.get('amount', ngo_donation_requests.amount)
-        ngo_donation_requests.date = request_data.get('date', ngo_donation_requests.date)
-        ngo_donation_requests.ngo_id = request_data.get('ngo_id', ngo_donation_requests.ngo_id)
-        ngo_donation_requests.admin_id = request_data.get('admin_id', ngo_donation_requests.admin_id)
-
-      
+        ngo_donation_requests.org_name = request_data.get(
+            'org_name', ngo_donation_requests.org_name)
+        ngo_donation_requests.org_email = request_data.get(
+            'org_email', ngo_donation_requests.org_email)
+        ngo_donation_requests.project_name = request_data.get(
+            'project_name', ngo_donation_requests.project_name)
+        ngo_donation_requests.donation_purpose = request_data.get(
+            'donation_purpose', ngo_donation_requests.donation_purpose)
+        ngo_donation_requests.amount = request_data.get(
+            'amount', ngo_donation_requests.amount)
+        ngo_donation_requests.date = request_data.get(
+            'date', ngo_donation_requests.date)
+        ngo_donation_requests.ngo_id = request_data.get(
+            'ngo_id', ngo_donation_requests.ngo_id)
+        ngo_donation_requests.admin_id = request_data.get(
+            'admin_id', ngo_donation_requests.admin_id)
 
         db.session.commit()
         return make_response(jsonify({"message": "Ngo donation request updated successfully"}), 200)
@@ -569,12 +595,75 @@ def ngo_donation_requests_by_id(id):
         return make_response(jsonify({"message": "Method not allowed"}), 405)
 
 
+# Daraja API Code
+my_endpoint = 'https://f5e2-105-163-2-194.ngrok-free.app'
 
+
+@app.route('/')
+def index():
+    # getAccessToken()
+    print("hello")
+    return 'testing'
+
+
+@app.route('/pay')
+def MpesaExpress():
+    amount = request.args.get('amount')
+    phoneNumber = request.args.get('phoneNumber')
+    print(phoneNumber)
+    endpoint = 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest'
+    access_token = getAccessToken()
+    headers = {"Authorization": "Bearer %s" % access_token}
+    Timestamp = datetime.now()
+    times = Timestamp.strftime("%Y%m%d%H%M%S")
+    password_str = "174379" + \
+        "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919" + times
+    password_bytes = password_str.encode('utf-8')
+    password = base64.b64encode(password_bytes).decode('utf-8')
+    # password = hashlib.sha1(password_bytes).hexdigest()
+    data = {
+        "BusinessShortCode": "174379",
+        "Password": password,
+        "Timestamp": times,
+        "TransactionType": "CustomerPayBillOnline",
+        "PartyA": phoneNumber,
+        "PartyB": "174379",
+        "PhoneNumber": phoneNumber,
+        "CallBackURL": my_endpoint + '/lnmo-callback',
+        "AccountReference": "TestPay",
+        "TransactionDesc": "HelloTest",
+        "Amount": amount
+    }
+    res = requests.post(endpoint, json=data, headers=headers)
+    print(res)
+    return res.json()
+
+
+@app.route('/lnmo-callback', methods=['POST'])
+def incoming():
+    data = request.get_json()
+    print(data)
+    print("ok")
+    return 'ok'
+
+
+def getAccessToken():
+    consumer_key = "wwNQJ1dnPz39MoJjLC8k3iayB3L47WDq"
+    consumer_secret = "M1NFk5KaF75mntqL"
+    endpoint = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials'
+    r = requests.get(endpoint, auth=HTTPBasicAuth(
+        consumer_key, consumer_secret))
+    data = r.json()
+    return data['access_token']
+
+
+if __name__ == '__main__':
+    app.run(port=5000)
 
 # input validators
 # validate input for email in the login
 # validate password
-# authentication using JWT 
+# authentication using JWT
 # authentication for NGo,
 # /login,/register,/signup, logout,then will directed to NGO dashboard
-# import redirect and JWT 
+# import redirect and JWT
